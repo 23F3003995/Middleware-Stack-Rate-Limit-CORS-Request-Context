@@ -5,7 +5,7 @@ Layer order (outermost -> innermost):
 so every response, including 429s, carries CORS headers and X-Request-ID.
 
 Env vars:
-    EMAIL          your logged-in address (required)
+    EMAIL          optional override (defaults to the IITM login address)
     EXTRA_ORIGINS  comma-separated extra allowed origins, e.g. the exam page origin
 Run (single worker, state is in memory):
     uvicorn ping_api:app --host 0.0.0.0 --port $PORT
@@ -20,9 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-EMAIL = os.environ.get("EMAIL", "").strip()
-if not EMAIL:
-    raise RuntimeError("Set the EMAIL environment variable to your logged-in address")
+EMAIL = os.environ.get("EMAIL", "23f3003995@ds.study.iitm.ac.in").strip()
 
 ASSIGNED_ORIGIN = "https://app-lugkhn.example.com"
 EXTRA_ORIGINS = [o.strip().rstrip("/") for o in os.environ.get("EXTRA_ORIGINS", "").split(",") if o.strip()]
@@ -72,9 +70,16 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "OPTIONS"],
-    allow_headers=["X-Request-ID", "X-Client-Id", "Content-Type"],
+    allow_headers=["*"],
     expose_headers=["X-Request-ID", "Retry-After"],
 )
+
+
+# Outermost: log the Origin of every request (including preflights) so it can be read in Render logs
+@app.middleware("http")
+async def log_origin(request: Request, call_next):
+    print(f"REQ {request.method} {request.url.path} origin={request.headers.get('origin')}", flush=True)
+    return await call_next(request)
 
 
 @app.get("/ping")
